@@ -1,7 +1,7 @@
 #运行路径设置
 import sys
-import time, keyboard
-sys.path.insert(0,r'D:\Pyproject\dogfight-sandbox-hg2-main\dogfight-sandbox-hg2-main\network_client_example')
+import time
+sys.path.insert(0,r'D:\Pyproject\dogfight-sandbox-hg2-main\network_client_example')
 #库引用
 import dogfight_client as df
 import network_server as ns
