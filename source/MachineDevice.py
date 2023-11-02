@@ -8,6 +8,7 @@ from Particles import *
 import data_converter as dc
 import fsm_machine as fm
 import fsm_state as fs
+import Machines as mcs
 
 # =====================================================================================================
 #                                  Landing
@@ -1454,6 +1455,7 @@ class AircraftIAControlDevice(ControlDevice):
     # ==================================== functions
 
     # ================================ SearState
+
     def set_fire_distance(self, distance: float):
         """修改射击距离"""
         self.IA_target_distance_fight = distance
@@ -1936,7 +1938,6 @@ class AircraftIAControlDevice(ControlDevice):
                         aircraft.set_flaps_level(0)
                         td = aircraft.get_device("TargettingDevice")  # 寻找攻击目标
                         if td is not None:
-                            print("S")
                             td.search_nearest_target()
                             if td.target_id == 0:
                                 self.FSM_machine.trans_state(fs.FSMStateEnum.rep)

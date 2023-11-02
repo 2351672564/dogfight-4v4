@@ -16,7 +16,8 @@ class FSMStateEnum(Enum):
     att = 3
     rep = 4
     liftoff = 5
-    des = 6
+    adjust = 6
+    des = 7
 
 
 class FSMState:
@@ -208,9 +209,6 @@ class EscaState(FSMState):
         self.esca_state = 0  # 0为处于机动间隔，1为处于机动期间
         self.extern_exit = False
 
-        self.time_limit = 10
-        self.limit_timer = self.time_limit
-
     # songde
     def enter(self):
         """
@@ -229,10 +227,6 @@ class EscaState(FSMState):
         :param entity:
         :return:
         """
-        self.limit_timer -= dts
-        if self.limit_timer <= 0:
-            self.machine.trans_state(FSMStateEnum.sear)
-
         if self.esca_state == 0:
             self.controller.update_IA_escape_fsm(self.controller.machine, dts)
             self.timer -= dts
@@ -242,7 +236,6 @@ class EscaState(FSMState):
                 self.choose_method()
         else:
             # 若不采取准备动作（先转到平稳飞行再开始机动），则在这里使用self.controller.machine.IA_flag_maneuver_prepared = True
-            print(self.controller.IA_flag_maneuver_method)
             self.controller.update_IA_maneuver_fsm(self.controller.machine, dts)
             if self.controller.IA_flag_maneuver_finished:
                 self.controller.IA_flag_maneuver_finished = False
@@ -369,6 +362,48 @@ class RepState(FSMState):
     def type(self):
         return FSMStateEnum.rep
 
+
+class AdjustState(FSMState):
+
+    def __init__(self, controller):
+        super(AdjustState).__init__()
+        self.name = 'adjust'
+        self.controller = controller
+        self.extern_exit = False
+
+    # hansongde
+    def enter(self):
+        """
+        开始整备
+        :return:
+        """
+        logger.info("进入adjust状态")
+
+    # hansongde
+    def event(self, dts):
+        """
+        正在整备
+        :param entity:
+        :return:
+        """
+        if self.controller.machine.get_altitude() < self.controller.IA_altitude_min:
+            self.machine.trans_state(FSMStateEnum.liftoff)
+
+    def exit(self):
+        """
+        结束整备
+        :param entity:
+        :return:
+        """
+
+    def getNextState(self):
+        """
+        判断是否进入下一状态
+        :return:
+        """
+
+    def type(self):
+        return FSMStateEnum.adjust
 
 class DesState(FSMState):
     def __init__(self):

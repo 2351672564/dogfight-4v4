@@ -595,9 +595,8 @@ class Main:
             aircraft = Miuss(name, cls.scene, cls.scene_physics, cls.pl_resources, nationality, hg.Vec3(0, 500, 0), hg.Vec3(0, 0, 0))
         else:
             aircraft = None
-        
+
         if aircraft is not None:
-            aircraft.id = len(cls.destroyables_list)
             cls.destroyables_list.append(aircraft)
             aircraft.add_to_update_list()
             if nationality == 1:
@@ -1507,6 +1506,8 @@ class Main:
             
             if cls.keyboard.Pressed(hg.K_F9):
                 cls.flag_display_recorder = not cls.flag_display_recorder
+            if not cls.flag_display_recorder:
+                cls.flag_display_recorder = True
 
             if not cls.flag_renderless:
                 if cls.flag_gui or cls.flag_display_recorder:

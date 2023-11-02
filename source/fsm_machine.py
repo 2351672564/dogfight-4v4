@@ -14,6 +14,7 @@ from fsm_state import SearState
 from fsm_state import EscaState
 from fsm_state import AttState
 from fsm_state import RepState
+from fsm_state import AdjustState
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -27,6 +28,8 @@ class Entity:
         self.entity = entity #空中智能体的标识
         self.enemy: int = 3 #载D量
         self.preState: list = [] #历史状态，用于记录和回溯
+        self.time_limit = 30
+        self.timer = self.time_limit
 
         self.flag_missle_short = False
         self.flag_targeted = False
@@ -48,8 +51,11 @@ class Entity:
         rep_state = RepState(entity)
         self.add_state(rep_state)
 
-        init_state = LiftoffState(entity)
-        self.add_state(init_state)
+        liftoff_state = LiftoffState(entity)
+        self.add_state(liftoff_state)
+
+        adjust_state = AdjustState(entity)
+        self.add_state(adjust_state)
 
         self.set_state(FSMStateEnum.init)
         self.preState.append(self.states[FSMStateEnum.init])
@@ -61,6 +67,9 @@ class Entity:
         """
         :return:
         """
+        #self.timer -= dts
+        #if self.timer <= 0:
+        #    self.trans_state(FSMStateEnum.adjust)
         if self.state.type() == FSMStateEnum.init:
             if self.state.controller.machine is not None:
                 print(self.state.controller.machine)
@@ -102,6 +111,7 @@ class Entity:
         :param goal_state: 目标状态
         :return:
         """
+        self.timer = self.time_limit
         self.flag_locked = False
         self.flag_missle_short = False
         self.flag_ready_landing = False

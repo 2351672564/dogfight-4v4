@@ -8,7 +8,8 @@ from math import radians
 import json
 import network_server as netws
 from overlays import *
-from MachineDevice import *
+import vcr
+import Machines
 
 class Mission:
 
@@ -383,6 +384,10 @@ class Missions:
 # ============================ War fight
 	@classmethod
 	def mission_total_war_setup_players(cls, main):
+		vcr.flag_replay = False
+		vcr.flag_record = vcr.flag_record_on_start
+		Machines.Destroyable_Machine.INSTANCES.clear()
+		vcr.request_state = "record"
 
 		mission = cls.get_current_mission()
 		main.create_aircraft_carriers(mission.allies_carriers, mission.ennemies_carriers)
@@ -399,6 +404,57 @@ class Missions:
 
 		cls.setup_aircrafts_on_carrier(main.players_ennemies[n//2:n], main.aircraft_carrier_ennemies, 60)
 		
+		main.init_playground()
+
+		for i, ac in enumerate(main.players_allies):
+			ia = ac.get_device("IAControlDevice")
+			if ia is not None:
+				ia.activate()
+
+		for i, ac in enumerate(main.players_ennemies):
+			ia = ac.get_device("IAControlDevice")
+			if ia is not None:
+				ia.activate()
+
+		main.setup_views_carousel()
+		main.set_view_carousel("Aircraft_ally_" + str(len(main.players_allies)))
+		main.set_track_view("back")
+
+		main.user_aircraft = main.get_player_from_caroursel_id(main.views_carousel[main.views_carousel_ptr])
+		main.user_aircraft.set_focus()
+
+		if main.user_aircraft is not None:
+			ia = main.user_aircraft.get_device("IAControlDevice")
+			if ia is not None:
+				ia.deactivate()
+			uctrl = main.user_aircraft.get_device("UserControlDevice")
+			if uctrl is not None:
+				uctrl.activate()
+			if len(main.players_allies) < 4:
+				main.user_aircraft.reset_thrust_level(1)
+				main.user_aircraft.activate_post_combustion()
+	@classmethod
+	def mission_replay_setup_players(cls, main):
+		vcr.flag_replay = True
+		vcr.flag_record = vcr.flag_record_on_start
+		vcr.ReplayTimer.setup()
+		Machines.Destroyable_Machine.INSTANCES.clear()
+
+		mission = cls.get_current_mission()
+		main.create_aircraft_carriers(mission.allies_carriers, mission.ennemies_carriers)
+		main.create_players(mission.allies, mission.ennemies)
+
+		cls.setup_carriers(main.aircraft_carrier_allies, hg.Vec3(0, 0, 0), hg.Vec3(300, 0, 25), 0)
+		cls.setup_carriers(main.aircraft_carrier_ennemies, hg.Vec3(-20000, 0, 0), hg.Vec3(50, 0, -350), radians(90))
+
+
+		cls.setup_aircrafts_on_carrier(main.players_allies, main.aircraft_carrier_allies, 0)
+
+		n = len(main.players_ennemies)
+		cls.aircrafts_starts_in_sky(main.players_ennemies[0:n // 2], hg.Vec3(-8000, 1000, 0), hg.Vec3(2000, 500, 2000), hg.Vec2(-180, -175), hg.Vec2(800 / 3.6, 600 / 3.6))
+
+		cls.setup_aircrafts_on_carrier(main.players_ennemies[n//2:n], main.aircraft_carrier_ennemies, 60)
+
 		main.init_playground()
 
 		for i, ac in enumerate(main.players_allies):
@@ -582,7 +638,10 @@ class Missions:
 		cls.validation_state = tools.create_stereo_sound_state(hg.SR_Once)
 		cls.validation_state.volume = 0.5
 
-		cls.missions.append(Mission("Network mode", ["Rafale"] * 2 + ["F16"] * 2, ["TFX", "Eurofighter"], 1, 1, Missions.network_mode_setup, Missions.network_mode_end_test, Missions.network_mode_end_phase_update))
+		cls.missions.append(Mission("Network mode", ["Eurofighter"]*4, ["Rafale"]*4, 1, 1, Missions.network_mode_setup, Missions.network_mode_end_test, Missions.network_mode_end_phase_update))
+
+		cls.missions.append(Mission("Replay mode", ["Rafale"] * 2 + ["Eurofighter"] * 2, ["Rafale"] * 2 + ["Eurofighter"] * 2, 1, 1, Missions.mission_replay_setup_players, Missions.mission_war_end_test, Missions.mission_war_end_phase_update))
+		cls.missions.append(Mission("War: 4 allies against 4 ennemies", ["Rafale"] * 2 + ["Eurofighter"] * 2, ["Rafale"] * 2 + ["Eurofighter"] * 2, 1, 1, Missions.mission_total_war_setup_players, Missions.mission_war_end_test, Missions.mission_war_end_phase_update))
 
 		cls.missions.append(Mission("Training with Rafale", [], ["Rafale"], 0, 1, Missions.mission_setup_training, Missions.mission_training_end_test, Missions.mission_training_end_phase_update))
 		cls.missions.append(Mission("Training with Eurofighter", [], ["Eurofighter"], 0, 1, Missions.mission_setup_training, Missions.mission_training_end_test, Missions.mission_training_end_phase_update))

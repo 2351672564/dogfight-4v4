@@ -153,7 +153,7 @@ def init_menu_state():
         ["Gun" , {"keyboard": imkb["FIRE_MACHINE_GUN"]}],
         ["Missiles" , {"keyboard": imkb["FIRE_MISSILE"]}],
         ["Target selection" , {"keyboard": imkb["NEXT_TARGET"]}],
-        ["", {"keyboard": imkb["INCREASE_THRUST_LEVEL"] + " / " + imkb["DECREASE_THRUST_LEVEL"]}],
+        ["Thrust level", {"keyboard": imkb["INCREASE_THRUST_LEVEL"] + " / " + imkb["DECREASE_THRUST_LEVEL"]}],
         ["Brake" , {"keyboard": imkb["INCREASE_BRAKE_LEVEL"] + " / " + imkb["DECREASE_BRAKE_LEVEL"]}],
         ["Flaps" , {"keyboard": imkb["INCREASE_FLAPS_LEVEL"] + " / " + imkb["DECREASE_FLAPS_LEVEL"]}],
         ["Post combustion (only thrust=100%)" ,{"keyboard": imkb["SWITCH_POST_COMBUSTION"]}],
@@ -360,8 +360,8 @@ def init_main_state():
     Main.destroy_sfx()
     ParticlesEngine.reset_engines()
     Destroyable_Machine.reset_machines()
-    # mission = Missions.get_current_mission()
-    mission = Missions.missions[0]
+    mission = Missions.get_current_mission()
+
     mission.setup_players(Main)
 
     n_aircrafts = len(Main.players_allies) + len(Main.players_ennemies)
@@ -429,16 +429,27 @@ def main_state(dts):
             HUD_Radar.update(Main, Main.user_aircraft, Main.destroyables_list)
 
     # Destroyable_Machines physics & movements update
-    Main.update_kinetics(dts)
+    #print(vcr.state)
+    if not vcr.flag_replay:
+        Main.update_kinetics(dts)
+    else:
+        if not vcr.is_init():
+            vcr.init()
+        else:
+            vcr.update_play(Main, Main.simulation_dt)
+            if Main.keyboard.Pressed(hg.K_U):
+                vcr.ReplayTimer.speed_up()
+            if Main.keyboard.Pressed(hg.K_D):
+                vcr.ReplayTimer.speed_down()
+            if Main.keyboard.Pressed(hg.K_S):
+                vcr.ReplayTimer.reset_speed()
+    if vcr.state == "record":
+        vcr.update(Main, Main.simulation_dt)
 
     # Update sfx
     if Main.flag_sfx:
         for sfx in Main.players_sfx: sfx.update_sfx(Main, dts)
         for sfx in Main.missiles_sfx: sfx.update_sfx(Main, dts)
-
-
-    if vcr.is_init():
-        vcr.update(Main, Main.simulation_dt)
 
     camera_noise_level = 0
 
@@ -483,10 +494,6 @@ def main_state(dts):
     elif mission.end_test(Main):
         init_end_state()
         return end_state
-    elif vcr.request_state == "replay":
-        Main.destroy_players()
-        init_replay_state()
-        return replay_state
 
     return main_state
 
@@ -515,6 +522,7 @@ def init_replay_state():
 
     Main.reset_timestamp()
     Main.flag_running = True
+    vcr.request_state = "replay"
     vcr.validate_requested_state()
 
 
@@ -594,6 +602,7 @@ def replay_state(dts):
 # =================================== END GAME =============================================
 
 def init_end_state():
+
     Main.flag_display_selected_aircraft = False
     Main.smart_camera.flag_inertia = True
     Main.set_renderless_mode(False)
@@ -640,6 +649,11 @@ def init_end_state():
 
 
 def end_state(dts):
+    vcr.flag_replay = False
+    vcr.flag_record = False
+    vcr.stop_play(Main)
+    if vcr.state == "record":
+        vcr.stop_record()
     
     Main.update_kinetics(dts)
 
@@ -679,6 +693,9 @@ def end_state(dts):
                 Main.destroy_players()
                 init_replay_state()
                 return replay_state
+            elif Main.next_state == "start_from_replay":
+                init_menu_state()
+                return menu_state
             else:
                 mission.reset()
                 Main.destroy_players()

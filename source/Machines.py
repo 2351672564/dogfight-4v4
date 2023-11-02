@@ -304,6 +304,7 @@ class AnimatedModel(Collisions_Object):
 # =====================================================================================================
 
 class Destroyable_Machine(AnimatedModel):
+    INSTANCES = []
 
     TYPE_GROUND = 0
     TYPE_SHIP = 1
@@ -350,6 +351,9 @@ class Destroyable_Machine(AnimatedModel):
     def __init__(self, name, model_name, scene: hg.Scene, scene_physics, pipeline_ressource: hg.PipelineResources, instance_scene_name, type, nationality, start_position=None, start_rotation=None):
 
         AnimatedModel.__init__(self, name, model_name, scene, pipeline_ressource, instance_scene_name)
+
+        self.instance_index = len(Destroyable_Machine.INSTANCES)
+        Destroyable_Machine.INSTANCES.append(self)
 
         self.action_map_default = {"fire_missile": -1, "thrust": (-1, 0), "flaps": (-1, 0), "brake": (-1, 0), "pitch": (-1, 0), "roll": (-1, 0), "yaw": (-1, 0)}
         self.action_map = self.action_map_default
@@ -1302,6 +1306,7 @@ class Missile(Destroyable_Machine):
 #                                  Aircraft
 # =====================================================================================================
 
+
 class Aircraft(Destroyable_Machine):
     IA_COM_IDLE = 0
     IA_COM_LIFTOFF = 1
@@ -1340,7 +1345,7 @@ class Aircraft(Destroyable_Machine):
         self.thrust_level = 0
         self.targeted = 0
         self.locked = 0
-        self.id = -1
+        self.id = 0
 
         self.start_landed = True
 

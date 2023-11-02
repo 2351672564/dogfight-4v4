@@ -53,11 +53,72 @@ fps_record = 60
 state = "disable"
 request_state = "disable"
 
+flag_record_on_start = True
+flag_record_takeover = False
+flag_replay = False
+flag_record = False
+
 color_before_event = hg.Color(1, 1, 0, 1)
 color_after_event = hg.Color(1, 0, 0, 1)
 event_max_size = 20
 event_timer_bound_futur = 0.25
 event_timer_bound_past = 2
+
+
+class ReplayTimer:
+    instance = None
+
+    def __init__(self):
+        self.timer = 0
+        self.speed = 1
+        if ReplayTimer.instance is None:
+            ReplayTimer.instance = self
+
+    @staticmethod
+    def setup():
+        if ReplayTimer.instance is None:
+            ReplayTimer.instance = ReplayTimer()
+        else:
+            ReplayTimer.instance.reset()
+
+    @classmethod
+    def get_time(cls):
+        return cls.instance.timer
+
+    @classmethod
+    def set_time(cls, time):
+        cls.instance.timer = time
+
+    @classmethod
+    def set_speed(cls, speed):
+        cls.instance.speed = speed
+
+    @classmethod
+    def reset_speed(cls):
+        cls.instance.speed = 1
+        print("Replay Speed Set to " + str(cls.instance.speed))
+
+    @classmethod
+    def speed_up(cls):
+        cls.instance.speed += 0.5
+        print("Replay Speed Set to " + str(cls.instance.speed))
+
+    @classmethod
+    def speed_down(cls):
+        cls.instance.speed -= 0.5
+        print("Replay Speed Set to " + str(cls.instance.speed))
+
+    @classmethod
+    def update(cls, dts):
+        cls.instance.timer += dts * cls.instance.speed
+        if cls.instance.timer < 0:
+            cls.instance.timer = 0
+
+    def reset(self):
+        self.timer = 0
+        self.speed = 1
+
+
 
 # Create recordable items from dogfight scene
 def setup_items(main):
@@ -243,7 +304,7 @@ def update_recording(main, dt):
                 v = ""
                 n = f"{name}_{p}"
                 if p == "machine_state":
-                        v = serialize_machine_state(item)
+                    v = serialize_machine_state(item)
                 elif p == "world":
                     v = dc.serialize_mat4(item.GetTransform().GetWorld())
                 elif p == "mat4":
@@ -297,7 +358,7 @@ def create_scene(main, scene_items):
 
 def start_play(main):
     global playing, timer
-    
+
     c = conn.cursor()
 
     # Get record items and create scene
@@ -319,6 +380,7 @@ def stop_play(main):
     pausing = False
     clear_items()
     main.clear_scene()
+
 
 def pause_play():
     global pausing
@@ -349,8 +411,8 @@ def update_play(main, dt):
             n = f"{name}_{p}"
             #if p not in items_words_list:
             #    n = f"{name}_{p['n']}"
-            
-            c.execute(f"SELECT v FROM {n} where id_rec={current_id_play} and c <= {timer} ORDER BY c DESC LIMIT 1;")
+
+            c.execute(f"SELECT v FROM {n} where id_rec={current_id_play} and c <= {ReplayTimer.get_time()} ORDER BY c DESC LIMIT 1;")
             r = c.fetchone()
             if r is not None:
                 v = r["v"]
@@ -397,21 +459,29 @@ def update_play(main, dt):
                 
                 if t > 1e-5:
                     Overlays.add_circle3D(dc.deserialize_vec3(v[2]), float(v[1]) * event_max_size * t, c)
-           
 
-    if not pausing:
-        timer += hg.time_to_sec_f(dt)
+    ReplayTimer.update(hg.time_to_sec_f(dt))
 
-    if timer >= recorded_max_time:
-        timer = recorded_max_time
-        if not pausing:
-            pause_play()
+    if ReplayTimer.get_time() >= recorded_max_time:
+        pass
+        #ReplayTimer.set_time(recorded_max_time)
+        #if not pausing:
+        #    pause_play()
+
+    #if not pausing:
+    #    timer += hg.time_to_sec_f(dt)
+
+    #if timer >= recorded_max_time:
+    #    timer = recorded_max_time
+    #    if not pausing:
+    #        pause_play()
 
 
 def update_gui_record(main):
     
     global selected_item_idx, recorded_min_time, recorded_max_time, timer, fps_record, current_id_play, selected_record, current_id_user, adding_user, user_name, user_info, recorded_fps, request_state
-    
+    global flag_record_takeover, flag_replay
+
     if hg.ImGuiBegin("Dogfight - Recorder"):
         if adding_user:
             user_name = hg.ImGuiInputText("Name", user_name, 128)[1]
@@ -451,8 +521,27 @@ def update_gui_record(main):
                         selected_item_idx = d
 
                 # Record:
-                if hg.ImGuiButton("Start recording"):
-                    name_record = datetime.now().strftime("%m/%d/%Y_%H:%M:%S")
+                #if hg.ImGuiButton("Start recording"):
+                if flag_record:
+                    c.execute(f'''SELECT name FROM records WHERE id_user={current_id_user}''')
+                    if not flag_replay:
+                        num = len(c.fetchall())
+                        name_record = "record_" + str(num)
+                    else:
+                        sub_index = 0
+                        c.execute(f'''SELECT name FROM records WHERE id_user={current_id_user}''')
+                        r = c.fetchall()
+                        r = [x for xs in r for x in xs]
+                        parent_name = r[selected_record - 1]
+                        res = 0
+                        new_name = str()
+                        while res is not None:
+                            new_name = parent_name + "_" + str(sub_index)
+                            c.execute(f'''SELECT id_rec FROM records WHERE id_user={current_id_user} AND name=\"{new_name}\"''')
+                            res = c.fetchone()
+                            sub_index += 1
+                        name_record = new_name
+                    #name_record = datetime.now().strftime("%m/%d/%Y_%H:%M:%S")
                     start_record(dc.conform_string(name_record))
                 
                 fps_record = int(hg.ImGuiSliderFloat("Recording FPS", fps_record, 1, 128)[1])
@@ -487,13 +576,29 @@ def update_gui_record(main):
             elif recording:
                 if hg.ImGuiButton("Stop recording"):
                     stop_record()
+                if flag_replay:
+                    if hg.ImGuiButton("Take Over"):
+                        flag_record_takeover = True
+                        flag_replay = False
+                    if hg.ImGuiButton("< Speed down") or main.keyboard.Pressed(hg.K_D):
+                        ReplayTimer.speed_down()
+                    hg.ImGuiSameLine()
+                    hg.ImGuiText(str(ReplayTimer.instance.speed))
+                    hg.ImGuiSameLine()
+                    if hg.ImGuiButton("Speed up >") or main.keyboard.Pressed(hg.K_U):
+                        ReplayTimer.speed_up()
+                    if hg.ImGuiButton("Reset Speed"):
+                        ReplayTimer.reset_speed()
+
     hg.ImGuiEnd()
 
 def update_gui_replay(main, keyboard):
     
     global selected_item_idx, recorded_min_time, recorded_max_time, timer, fps_record, current_id_play, selected_record, current_id_user, adding_user, user_name, user_info, recorded_fps, request_state
-    
+    global flag_record_takeover, flag_replay
+
     if hg.ImGuiBegin("Dogfight - Replayer"):
+
         if not playing:
             
             c = conn.cursor()
@@ -513,6 +618,8 @@ def update_gui_replay(main, keyboard):
             r = [x for xs in r for x in xs]
             selected_record = hg.ImGuiCombo("Records", selected_record, ["None"]+r)[1]
 
+            if selected_record == 0:
+                selected_record = 1
             if selected_record != 0:
                 # get current id record
                 c.execute(f'''SELECT id_rec FROM records WHERE id_user={current_id_user} AND name=\"{r[selected_record-1]}\"''')
@@ -533,7 +640,7 @@ def update_gui_replay(main, keyboard):
 
                 if hg.ImGuiButton("Start play"):
                     start_play(main)
-            
+
             if hg.ImGuiButton("Exit replay mode"):
                 request_state = "disable"
         
@@ -576,13 +683,26 @@ def update_gui_wait_request():
     hg.ImGuiEnd()
 
 def update_gui_disable():
-    global request_state
+    global request_state, selected_record, flag_record_on_start
+
+
     if hg.ImGuiBegin("Dogfight - Recorder"):
         
         hg.ImGuiText("Select a mission to record or enter replay mode")
         
         if hg.ImGuiButton("Enter replay mode"):
             request_state = "replay"
+
+        # Records list:
+        c = conn.cursor()
+        c.execute(f'''SELECT name FROM records WHERE id_user={current_id_user}''')
+        r = c.fetchall()
+        r = [x for xs in r for x in xs]
+        selected_record = hg.ImGuiCombo("Records", selected_record, ["None"] + r)[1]
+
+        # Record at Start:
+        flag_record_on_start = not hg.ImGuiCombo("Record on Start", 1 if not flag_record_on_start else 0, ["Yes", "No"])[1]
+
     hg.ImGuiEnd()
 
 def update_gui_updating_database():
@@ -673,12 +793,14 @@ def deserialize_machine_state(machine:Machines.Destroyable_Machine, s:str):
     
 
 def serialize_missile_state(machine:Machines.Missile):
+    target_index = str(machine.instance_index)
     matrix = dc.serialize_mat4(machine.get_parent_node().GetTransform().GetWorld())
     v_move = dc.serialize_vec3(machine.get_move_vector())
     wreck = dc.serialize_boolean(machine.wreck)
-    return matrix + ":" + v_move + ":" + wreck
+    return matrix + ":" + v_move + ":" + wreck + ":" + target_index
 
 def serialize_aircraft_state(machine:Machines.Aircraft):
+    target_index = str(machine.instance_index)
     matrix = dc.serialize_mat4(machine.get_parent_node().GetTransform().GetWorld())
     v_move = dc.serialize_vec3(machine.get_move_vector())
     health_lvl = str(machine.get_health_level())
@@ -693,23 +815,26 @@ def serialize_aircraft_state(machine:Machines.Aircraft):
         target_name = None
     if target_name is None:
         target_name = str(target_name)
-    return matrix +":"+ v_move +":"+ health_lvl + ":" + wreck + ":" + brake_level + ":" + flaps_level + ":" + landed + ":" + target_name
+    return matrix +":"+ v_move +":"+ health_lvl + ":" + wreck + ":" + brake_level + ":" + flaps_level + ":" + landed + ":" + target_name + ":" + target_index
 
 
 
 def serialize_missile_launcher_state(machine:MissileLauncherS400):
+    target_index = str(machine.instance_index)
     matrix = dc.serialize_mat4(machine.get_parent_node().GetTransform().GetWorld())
     wreck = dc.serialize_boolean(machine.wreck)
-    return matrix + ":" + wreck
+    return matrix + ":" + wreck + ":" + target_index
 
 def serialize_ship_state(machine:Machines.Carrier):
+    target_index = str(machine.instance_index)
     matrix = dc.serialize_mat4(machine.get_parent_node().GetTransform().GetWorld())
     wreck = dc.serialize_boolean(machine.wreck)
-    return matrix + ":" + wreck
+    return matrix + ":" + wreck + ":" + target_index
 
 
 def deserialize_aircraft_state(machine:Machines.Aircraft, s:str):
     f = s.split(":")
+    machine = Machines.Destroyable_Machine.INSTANCES[int(f[8])]
     matrix = dc.deserialize_mat4(f[0])
     machine.v_move = dc.deserialize_vec3(f[1])
     machine.wreck = bool(f[3])
@@ -725,6 +850,7 @@ def deserialize_aircraft_state(machine:Machines.Aircraft, s:str):
 
 def deserialize_missile_state(machine:Machines.Missile, s:str):
     f = s.split(":")
+    machine = Machines.Destroyable_Machine.INSTANCES[int(f[3])]
     matrix = dc.deserialize_mat4(f[0])
     machine.v_move = dc.deserialize_vec3(f[1])
     machine.wreck = bool(f[2])
@@ -732,12 +858,14 @@ def deserialize_missile_state(machine:Machines.Missile, s:str):
 
 def deserialize_ship_state(machine:Machines.Carrier, s:str):
     f = s.split(":")
+    machine = Machines.Destroyable_Machine.INSTANCES[int(f[2])]
     machine.wreck = bool(f[1])
     matrix = dc.deserialize_mat4(f[0])
     machine.get_parent_node().GetTransform().SetWorld(matrix)
 
 def deserialize_missile_launcher_state(machine:MissileLauncherS400, s:str):
     f = s.split(":")
+    machine = Machines.Destroyable_Machine.INSTANCES[int(f[2])]
     machine.wreck = bool(f[1])
     matrix = dc.deserialize_mat4(f[0])
     machine.get_parent_node().GetTransform().SetWorld(matrix)
