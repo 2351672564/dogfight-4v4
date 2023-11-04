@@ -1,4 +1,5 @@
 # Copyright (C) 2018-2021 Eric Kernin, NWNC HARFANG.
+
 import harfang
 import harfang as hg
 import json
@@ -8,6 +9,7 @@ from Particles import *
 import data_converter as dc
 import fsm_machine as fm
 import fsm_state as fs
+import copy
 import Machines as mcs
 
 # =====================================================================================================
@@ -186,7 +188,7 @@ class TargettingDevice(MachineDevice):
     def __init__(self, name, machine, start_state=True):
         MachineDevice.__init__(self, name, machine, start_state)
         self.targets = []
-        self.first_lock = True
+        self.first_search = True
         self.target_id = 0
         self.target_lock_range = hg.Vec2(100, 3000)  # Target lock distance range
         self.target_lock_delay = hg.Vec2(1, 5)  # Target lock delay in lock range
@@ -255,60 +257,40 @@ class TargettingDevice(MachineDevice):
     def set_destroyable_targets(self, targets):
         self.destroyable_targets = targets
 
-    def search_target(self):
-        return
-        if len(self.targets) == 0:
-            self.target_id = 0
-        else:
-            self.target_id = 0
-            if self.first_lock:  # 第一次 随机寻找目标
-                self.target_id = int(uniform(0, len(self.targets) - 0.1)) + 1
-            else:  # 第二次及之后 寻找距离最近的目标
-                target_distances = []
-                this_pos = self.machine.parent_node.GetTransform().GetPos()
-                for target_id in range(1, len(self.targets)):
-                    target = self.targets[target_id - 1]
-                    target_distance = hg.Len(this_pos - target.parent_node.GetTransform().GetPos())
-                    item = (target_distance, target_id)
-                    target_distances.append(item)
-                    for index in range(len(target_distances)):
-                        if target_distances[index][0] <= target_distance:
-                            target_distances.insert(index, item)
-                        target_distances.pop()
-                for _, target_id in target_distances:
-                    target = self.targets[target_id - 1]
-                    if not target.wreck and target.activated:
-                        self.target_id = target_id
-
     def search_nearest_target(self):
-        if len(self.targets) == 0:
-            self.target_id = 0
-        else:
-            self.target_id = 0
-            if self.first_lock:  # 第一次 随机寻找目标
-                print("S")
-                self.target_id = int(uniform(0, len(self.targets) - 0.1)) + 1
-                self.first_lock = False
-            else:  # 第二次及之后 寻找距离最近的目标
-                target_distances = []
-                this_pos = self.machine.parent_node.GetTransform().GetPos()
-                for target_id in range(len(self.targets)):
-                    target_id += 1
-                    target = self.targets[target_id - 1]
-                    target_distance = hg.Len(this_pos - target.parent_node.GetTransform().GetPos())
-                    item = (target_distance, target_id)
-                    target_distances.append(item)
-                    for index in range(len(target_distances)):
-                        if target_distances[index][0] <= target_distance:
-                            target_distances.insert(index, item)
-                            target_distances.pop()
-                            continue
-                for _, target_id in target_distances:
-                    target = self.targets[target_id - 1]
-                    if not target.wreck and target.activated:
-                        self.target_id = target_id
-            if self.target_id != 0:
-                self.update_target_flag()
+        if not self.first_search and self.target_id != 0:
+            target = self.targets[self.target_id - 1]
+            if not target.wreck and target.activated:
+                return
+        self.target_id = 0
+        if self.first_search:  # 第一次 随机寻找目标
+            self.target_id = int(uniform(0, len(self.targets) - 0.1)) + 1
+            self.machine.log(str(self.target_id) + " targeted (first search)")
+            self.first_search = False
+        else:  # 第二次及之后 寻找距离最近的目标
+            target_distances = []
+            this_pos = self.machine.parent_node.GetTransform().GetPos()
+            for target_id in range(len(self.targets)):
+                target_id += 1
+                target = self.targets[target_id - 1]
+                target_distance = hg.Len(this_pos - target.parent_node.GetTransform().GetPos())
+                item = (target_distance, target_id)
+                target_distances.append(item)
+                new_distances = copy.deepcopy(target_distances)
+                for index in range(len(target_distances)):
+                    if target_distance <= target_distances[index][0]:
+                        new_distances.insert(index, item)
+                        new_distances.pop()
+                        break
+                target_distances = new_distances
+            for _, target_id in target_distances:
+                target = self.targets[target_id - 1]
+                if not target.wreck and target.activated:
+                    self.target_id = target_id
+                    self.machine.log(str(target_id) + " targeted (target wrecked)")
+                    break
+        #if self.target_id != 0:
+        #    self.update_target_flag()
 
     def update_target_flag(self):
         if len(self.targets) != 0:
@@ -322,7 +304,7 @@ class TargettingDevice(MachineDevice):
             self.target_locked = False
             self.target_lock_t = 0
             self.target_locking_state = 0
-            self.search_target()
+            self.search_nearest_target()
         else:
             self.target_id = 0
 
@@ -358,9 +340,7 @@ class TargettingDevice(MachineDevice):
                 self.target_locking_state = min(1, self.target_lock_t / delay)
                 if self.target_lock_t >= delay:
                     self.target_locked = True
-                    target.locked += 1
             else:
-                target.locked -= 1
                 self.target_locked = False
                 self.target_lock_t = 0
                 self.target_out_of_range = True
@@ -1443,6 +1423,7 @@ class AircraftIAControlDevice(ControlDevice):
         self.IA_flag_maneuver_method_num = 4
         self.IA_flag_maneuver_method = 0
         self.IA_flag_maneuver_progress = 0
+        self.IA_flag_maneuver_init_sign = 1
         self.IA_flag_maneuver_prepared = False
         self.IA_flag_maneuver_finished = False
 
@@ -1555,6 +1536,19 @@ class AircraftIAControlDevice(ControlDevice):
                         if alt < self.IA_altitude_min or alt > self.IA_altitude_max:
                             self.IA_flag_altitude_correction = True
 
+                    if td.target_angle < self.IA_gun_angle and td.target_distance < self.IA_gun_distance_max:
+                        n = aircraft.get_machinegun_count()
+                        for i in range(n):
+                            mgd = aircraft.get_device("MachineGunDevice_%02d" % i)
+                            if mgd is not None and not mgd.is_activated():
+                                mgd.activate()
+                    else:
+                        n = aircraft.get_machinegun_count()
+                        for i in range(n):
+                            mgd = aircraft.get_device("MachineGunDevice_%02d" % i)
+                            if mgd is not None and mgd.is_activated():
+                                mgd.deactivate()
+
                     flag_missiles_ok = False
                     if md is not None:
                         for missile in md.missiles:
@@ -1566,6 +1560,12 @@ class AircraftIAControlDevice(ControlDevice):
                     """不再具备战斗条件"""
                     if not flag_missiles_ok or aircraft.get_num_bullets() == 200 or aircraft.health_level < 0.33:
                         return
+                else:
+                    n = aircraft.get_machinegun_count()
+                    for i in range(n):
+                        mgd = aircraft.get_device("MachineGunDevice_%02d" % i)
+                        if mgd is not None and mgd.is_activated():
+                            mgd.deactivate()
 
                 """已经到达射击距离后，仅进行俯仰角调整"""
                 if not self.IA_flag_go_to_target:
@@ -1632,9 +1632,11 @@ class AircraftIAControlDevice(ControlDevice):
     def update_IA_maneuver_fsm(self, aircraft, dts):
         if not self.IA_flag_maneuver_prepared:
             if self.IA_flag_maneuver_progress == 0:
-                print("准备筋斗机动") if self.IA_flag_maneuver_method == 0 else print("准备横滚机动") \
-                    if self.IA_flag_maneuver_method == 1 else print("准备英麦曼机动") if self.IA_flag_maneuver_method == 2 \
-                    else print("准备眼镜蛇机动") if self.IA_flag_maneuver_method == 3 else print("执行完毕")
+                aircraft.log("准备筋斗机动") if self.IA_flag_maneuver_method == 0 else (
+                    aircraft.log("准备横滚机动")) if self.IA_flag_maneuver_method == 1 else\
+                    aircraft.log("准备英麦曼机动") if self.IA_flag_maneuver_method == 2 else\
+                    aircraft.log("准备眼镜蛇机动") if self.IA_flag_maneuver_method == 3 else (
+                        aircraft.log("执行完毕"))
                 self.IA_flag_maneuver_progress = 1
             aircraft.set_brake_level(0)
             aircraft.set_flaps_level(1)
@@ -1659,9 +1661,11 @@ class AircraftIAControlDevice(ControlDevice):
             if self.IA_flag_maneuver_progress == 0:
                 print("筋斗机动")
                 self.IA_flag_maneuver_progress = 1
-            elif self.IA_flag_maneuver_progress == 1 and aircraft.pitch_attitude < 0:
+            elif self.IA_flag_maneuver_progress == 1 and aircraft.pitch_attitude > 0:
                 self.IA_flag_maneuver_progress = 2
-            elif self.IA_flag_maneuver_progress == 2 and aircraft.pitch_attitude > 0:
+            elif self.IA_flag_maneuver_progress == 2 and aircraft.pitch_attitude < 0:
+                self.IA_flag_maneuver_progress = 3
+            elif self.IA_flag_maneuver_progress == 3 and aircraft.pitch_attitude > 0:
                 aircraft.set_pitch_level(0)
                 self.IA_flag_maneuver_progress = 0
                 self.IA_flag_maneuver_method += 1
@@ -1683,16 +1687,21 @@ class AircraftIAControlDevice(ControlDevice):
                 self.IA_flag_maneuver_prepared = False
                 self.IA_flag_maneuver_finished = True
         elif self.IA_flag_maneuver_method == 2:
-            aircraft.set_pitch_level(-1) if self.IA_flag_maneuver_progress <= 1 else aircraft.set_roll_level(-1)
+            aircraft.set_pitch_level(-1 if self.IA_flag_maneuver_progress <= 2 else 0)
+            if 3 <= self.IA_flag_maneuver_progress <= 5:
+                aircraft.set_roll_level(-1)
             if self.IA_flag_maneuver_progress == 0:
                 print("英麦曼机动")
                 self.IA_flag_maneuver_progress = 1
-            elif self.IA_flag_maneuver_progress == 1 and aircraft.pitch_attitude < 0:
-                aircraft.set_pitch_level(0)
+            elif self.IA_flag_maneuver_progress == 1 and aircraft.pitch_attitude > 0:
                 self.IA_flag_maneuver_progress = 2
-            elif self.IA_flag_maneuver_progress == 2 and aircraft.roll_attitude > 0:
+            elif self.IA_flag_maneuver_progress == 2 and aircraft.pitch_attitude < 0:
                 self.IA_flag_maneuver_progress = 3
             elif self.IA_flag_maneuver_progress == 3 and aircraft.roll_attitude < 0:
+                self.IA_flag_maneuver_progress = 4
+            elif self.IA_flag_maneuver_progress == 4 and aircraft.roll_attitude > 0:
+                self.IA_flag_maneuver_progress = 5
+            elif self.IA_flag_maneuver_progress == 5 and aircraft.roll_attitude < 0:
                 aircraft.set_roll_level(0)
                 self.IA_flag_maneuver_progress = 0
                 self.IA_flag_maneuver_method += 1
@@ -1700,7 +1709,7 @@ class AircraftIAControlDevice(ControlDevice):
                 self.IA_flag_maneuver_finished = True
         elif self.IA_flag_maneuver_method == 3:
             aircraft.set_roll_level(0)
-            aircraft.set_pitch_level(-1) if self.IA_flag_maneuver_progress <= 2 else aircraft.set_pitch_level(1)
+            aircraft.set_pitch_level(-1 if self.IA_flag_maneuver_progress <= 2 else 1)
             if self.IA_flag_maneuver_progress == 0:
                 print("眼镜蛇机动")
                 self.IA_flag_maneuver_progress = 1
@@ -1814,7 +1823,7 @@ class AircraftIAControlDevice(ControlDevice):
 
                 td = aircraft.get_device("TargettingDevice")
                 if td.target_id == 0:
-                    td.search_target()
+                    td.search_nearest_target()
 
                 n = aircraft.get_machinegun_count()
                 for i in range(n):
@@ -1939,10 +1948,7 @@ class AircraftIAControlDevice(ControlDevice):
                         td = aircraft.get_device("TargettingDevice")  # 寻找攻击目标
                         if td is not None:
                             td.search_nearest_target()
-                            if td.target_id == 0:
-                                self.FSM_machine.trans_state(fs.FSMStateEnum.rep)
-                            else:
-                                self.FSM_machine.trans_state(fs.FSMStateEnum.sear)
+                            self.FSM_machine.trans_state(fs.FSMStateEnum.sear)
 
     def update_IA_idle(self, aircraft):
         autopilot = aircraft.devices["AutopilotControlDevice"]
@@ -2096,6 +2102,7 @@ class AircraftIAControlDevice(ControlDevice):
         td = aircraft.get_device("TargettingDevice")
         offenders = []
         for target_id, target in enumerate(td.targets):
+            target_id += 1
             td_t = target.get_device("TargettingDevice")
             if td_t is not None:
                 offender_target = td_t.get_target()
@@ -2105,6 +2112,7 @@ class AircraftIAControlDevice(ControlDevice):
             if len(offenders) > 1:
                 offenders.sort(key=lambda p: p[1])
             td.set_target_id(offenders[0][0])
+            self.machine.log(str(offenders[0][0]) + " targeted (hit by this enemy)")
 
     # =============================== Keyboard commands ====================================
 
@@ -2145,6 +2153,7 @@ class AircraftIAControlDevice(ControlDevice):
     def update(self, dts):
         if self.activated:
             self.update_controlled_device(dts)
+            self.update_cm_keyboard(dts)
             #if self.flag_user_control and self.machine.has_focus():
             #    if self.control_mode == ControlDevice.CM_KEYBOARD:
             #        self.update_cm_keyboard(dts)

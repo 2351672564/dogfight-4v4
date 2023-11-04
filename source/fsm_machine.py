@@ -26,14 +26,11 @@ class Entity:
         self.states: dict[FSMStateEnum, FSMState] = {}
         self.state: FSMState = None
         self.entity = entity #空中智能体的标识
-        self.enemy: int = 3 #载D量
+        self.enemy: int = 1 #载D量
         self.preState: list = [] #历史状态，用于记录和回溯
-        self.time_limit = 30
-        self.timer = self.time_limit
 
         self.flag_missle_short = False
         self.flag_targeted = False
-        self.flag_ready_landing = False
 
         #添加状态
         init_state = InitState(entity)
@@ -67,20 +64,11 @@ class Entity:
         """
         :return:
         """
-        #self.timer -= dts
-        #if self.timer <= 0:
-        #    self.trans_state(FSMStateEnum.adjust)
-        if self.state.type() == FSMStateEnum.init:
-            if self.state.controller.machine is not None:
-                print(self.state.controller.machine)
-                self.trans_state(FSMStateEnum.liftoff)
-            return
-        #print(self.state)
         self.state.event(dts)
         if self.state.extern_exit:
-            should_state = self.event_handle()  # 监测并判断飞机应处的状态
-            if should_state != self.state.type():
-                self.trans_state(should_state)
+            new_state = self.event_handle()  # 监测并判断飞机应处的状态
+            if new_state != self.state.type():
+                self.trans_state(new_state)
 
     def add_state(self, state: FSMState):
         key = state.type()
@@ -111,19 +99,11 @@ class Entity:
         :param goal_state: 目标状态
         :return:
         """
-        self.timer = self.time_limit
         self.flag_locked = False
         self.flag_missle_short = False
-        self.flag_ready_landing = False
         self.preState.append(goal_state)
         if goal_state in self.states:
-            print(self.state.controller.machine)
-            print(goal_state)
             self.set_state(goal_state)
-        else:
-            print(goal_state)
-            print(self.states)
-            print("No State Named " + str(goal_state) + " Found")
 
     def destroy(self):
         """
@@ -154,6 +134,7 @@ class Entity:
         :return:
         """
         if self.entity.machine.locked > 0 and not self.flag_locked:
+            self.entity.machine.log("locked by missile")
             self.flag_locked = True
             if random.uniform(0, 1) < 0.5:
                 return FSMStateEnum.esca

@@ -424,6 +424,7 @@ def main_state(dts):
                         Overlays.add_line(matrix * machine.bound_right, matrix * (machine.bound_right + hg.Vec3(1, 0, 0)), hg.Color.Red, hg.Color.Red)
                         Overlays.add_line(matrix * machine.bound_left, matrix * (machine.bound_left + hg.Vec3(-1, 0, 0)), hg.Color.Red, hg.Color.Red)
                         Overlays.display_boxe(machine.get_world_bounding_boxe(), hg.Color.Yellow)
+
     else:
         if Main.user_aircraft is not None and Main.flag_display_radar_in_renderless:
             HUD_Radar.update(Main, Main.user_aircraft, Main.destroyables_list)
@@ -455,7 +456,7 @@ def main_state(dts):
 
     if Main.user_aircraft is not None:
 
-        if Main.user_aircraft.type == Destroyable_Machine.TYPE_AIRCRAFT:
+        if not vcr.flag_replay and Main.user_aircraft.type == Destroyable_Machine.TYPE_AIRCRAFT:
             acc = Main.user_aircraft.get_linear_acceleration()
             camera_noise_level = max(0, Main.user_aircraft.get_linear_speed() * 3.6 / 2500 * 0.1 + pow(min(1, abs(acc / 7)), 2) * 1)
             if Main.user_aircraft.post_combustion:

@@ -53,7 +53,7 @@ fps_record = 60
 state = "disable"
 request_state = "disable"
 
-flag_record_on_start = True
+flag_record_on_start = False
 flag_record_takeover = False
 flag_replay = False
 flag_record = False
@@ -816,7 +816,6 @@ def serialize_aircraft_state(machine:Machines.Aircraft):
     if target_name is None:
         target_name = str(target_name)
     return matrix +":"+ v_move +":"+ health_lvl + ":" + wreck + ":" + brake_level + ":" + flaps_level + ":" + landed + ":" + target_name + ":" + target_index
-
 
 
 def serialize_missile_launcher_state(machine:MissileLauncherS400):

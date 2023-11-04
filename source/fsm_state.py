@@ -57,9 +57,12 @@ class InitState(FSMState):
         self.name = 'init'
         self.controller = controller
         self.extern_exit = False
+        logger.info("进入init状态")
 
     # hansongde
     def event(self, dts):
+        if self.controller.machine is not None:
+            self.machine.trans_state(FSMStateEnum.liftoff)
         pass
 
     def exit(self):
@@ -70,6 +73,9 @@ class InitState(FSMState):
         """
         logger.info("退出init状态")
 
+    def name(self):
+        return "init"
+
     def type(self):
         return FSMStateEnum.init
 
@@ -78,7 +84,7 @@ class LiftoffState(FSMState):
 
     def __init__(self, controller):
         super(LiftoffState).__init__()
-        self.name = 'sear'
+        self.name = 'liftoff'
         self.controller = controller
         self.extern_exit = False
 
@@ -122,6 +128,9 @@ class LiftoffState(FSMState):
         :return:
         """
 
+    def name(self):
+        return "liftoff"
+
     def type(self):
         return FSMStateEnum.liftoff
 
@@ -133,6 +142,12 @@ class SearState(FSMState):
         self.name = 'sear'
         self.controller = controller
         self.extern_exit = True
+
+        self.time_limit = 1.0
+        self.timer = self.time_limit
+
+        self.prev_pitch = 0
+        self.prev_roll = 0
 
         self.missile_freeze = 1
         self.missile_freeze_timer = 0
@@ -147,16 +162,11 @@ class SearState(FSMState):
         """
         1. 获取最近目标：初次按概率，其他按距离
         2. 更新当前飞机的锁定目标
+        3. 编写接口，向目标空中智能体对象通信，更新其已被锁定的flag（考虑在飞机类里面新增被锁定flag）
+        target = search_nearest_target() 
+        update_target_lock(self.controller.machine.plane_id, target)
         """
-        td = self.controller.machine.get_device("TargettingDevice")
-        if td is not None:
-            pass
-            #td.search_nearest_target()
-            """
-            3. 编写接口，向目标空中智能体对象通信，更新其已被锁定的flag（考虑在飞机类里面新增被锁定flag）
-            target = search_nearest_target() 
-            update_target_lock(self.controller.machine.plane_id, target)
-            """
+        self.timer = self.time_limit
 
     # hansongde
     def event(self, dts):
@@ -173,6 +183,15 @@ class SearState(FSMState):
             self.missile_freeze_timer -= dts
         self.controller.update_IA_fight_fsm(self.controller.machine, dts)  # 发射导弹的距离可通过self.controller.machine.set_fire_distance函数修改
 
+        if -0.3 < self.prev_roll - self.controller.machine.roll_attitude < 0.3 and -0.3 < self.prev_pitch - self.controller.machine.pitch_attitude < 0.3:
+            self.timer -= dts
+            if self.timer <= 0:
+                self.timer = self.time_limit
+                self.machine.trans_state(FSMStateEnum.esca)
+        else:
+            self.prev_roll = self.controller.machine.roll_attitude
+            self.prev_pitch = self.controller.machine.pitch_attitude
+            self.timer = self.time_limit
         """
         
         dts = get_distance_3D(self.controller.machine, target)
@@ -216,6 +235,7 @@ class EscaState(FSMState):
         :return:
         """
         self.esca_state = 1
+        self.extern_exit = False
         self.choose_method()
         logger.info("进入esca状态")
 
@@ -235,7 +255,8 @@ class EscaState(FSMState):
                 self.extern_exit = False
                 self.choose_method()
         else:
-            # 若不采取准备动作（先转到平稳飞行再开始机动），则在这里使用self.controller.machine.IA_flag_maneuver_prepared = True
+            # 若不采取准备动作（先转到平稳飞行再开始机动），则在这里使用
+            self.controller.machine.IA_flag_maneuver_prepared = True
             self.controller.update_IA_maneuver_fsm(self.controller.machine, dts)
             if self.controller.IA_flag_maneuver_finished:
                 self.controller.IA_flag_maneuver_finished = False
@@ -251,6 +272,7 @@ class EscaState(FSMState):
         facing_enemy = angle < 90 or angle > 270
         self.controller.IA_flag_maneuver_method = 2 if not facing_enemy and uniform(0, 1) < 0.5 \
                                                         else int(uniform(0, self.controller.IA_flag_maneuver_method_num - 0.1))
+        self.controller.machine.log("MANUEVER STARTED IN METHOD " + str(self.controller.IA_flag_maneuver_method))
 
     def exit(self):
         """
@@ -318,16 +340,12 @@ class RepState(FSMState):
         self.controller = controller
         self.extern_exit = False
 
-        self.timer = float()
-        self.interval = 1
-
     # hansongde
     def enter(self):
         """
         开始整备
         :return:
         """
-        self.timer = self.interval
         logger.info("进入rep状态")
 
     # hansongde
@@ -338,13 +356,8 @@ class RepState(FSMState):
         :return:
         """
         self.controller.update_IA_landing_fsm(self.controller.machine, dts)
-        if not self.machine.flag_ready_landing:
-            self.timer -= dts
-            if self.timer <= 0:
-                if self.controller.machine.targeted and random.uniform(0, 1) < 0.5:
-                    self.machine.trans_state(FSMStateEnum.esca)
-                else:
-                    self.timer = self.interval
+        if self.controller.machine.locked > 0:
+            self.machine.trans_state(FSMStateEnum.esca)
 
     def exit(self):
         """

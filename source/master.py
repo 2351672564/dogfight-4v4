@@ -871,7 +871,7 @@ class Main:
                     cls.smart_camera.setup(SmartCamera.TYPE_SATELLITE, cls.satellite_camera, tgt)
                     cls.scene.SetCurrentCamera(cls.satellite_camera)
 
-        elif keyboard.Pressed(hg.K_Numpad1):
+        elif keyboard.Pressed(hg.K_LShift):
             if not cls.flag_network_mode:
                 if cls.user_aircraft is not None:
                     uctrl = cls.user_aircraft.get_device("UserControlDevice")

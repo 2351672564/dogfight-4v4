@@ -12,6 +12,7 @@ from os import path, getcwd
 import json
 from math import log, floor
 import harfang.bin
+import tkinter
 
 # --------------- Inline arguments handler
 
@@ -69,7 +70,7 @@ else:
         harfang.bin.assetc('assets', '-api', 'GL')
     else:
         # dc.run_command("../bin/harfang/bin/assetc/assetc assets -quiet -progress")
-        harfang.bin.assetc('assets')
+        harfang.bin.assetc('assets')  
 
 
 # --------------- Init system
@@ -77,7 +78,7 @@ else:
 hg.InputInit()
 hg.WindowSystemInit()
 
-hg.SetLogDetailed(False)
+hg.SetLogDetailed(True)
 
 res_x, res_y = int(Main.resolution.x), int(Main.resolution.y)
 
@@ -99,19 +100,7 @@ def get_monitor_mode(width, height):
     return None, 0
 
 
-Main.win = None
-if Main.flag_fullscreen:
-    monitor, mode_id = get_monitor_mode(res_x, res_y)
-    if monitor is not None:
-        Main.win = hg.NewFullscreenWindow(monitor, mode_id)
-
-if Main.win is None:
-    Main.win = hg.NewWindow(res_x, res_y)
-
-if Main.flag_OpenGL:
-    hg.RenderInit(Main.win, hg.RT_OpenGL)
-else:
-    hg.RenderInit(Main.win)
+ 
 
 alias_modes = [hg.RF_MSAA2X, hg.RF_MSAA4X, hg.RF_MSAA8X, hg.RF_MSAA16X]
 aa = alias_modes[min(3, floor(log(Main.antialiasing) / log(2)) - 1)]

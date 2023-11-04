@@ -5,6 +5,7 @@ from math import radians, sqrt, pi, acos, asin
 import MathsSupp as ms
 import Physics
 from Machines import Destroyable_Machine
+import vcr
 
 
 class SmartCamera:
@@ -177,7 +178,7 @@ class SmartCamera:
 			self.update_tactical_camera(camera, dts)
 
 	def update_target_point(self, dts):
-		if self.flag_inertia:
+		if self.flag_inertia and not vcr.flag_replay:
 			v = self.target_node.GetTransform().GetPos() - self.target_point
 			self.target_point += v * self.pos_inertia * dts * 60
 			mat_n = hg.TransformationMat4(self.target_node.GetTransform().GetPos(), self.target_node.GetTransform().GetRot())

@@ -358,6 +358,9 @@ class Destroyable_Machine(AnimatedModel):
         self.action_map_default = {"fire_missile": -1, "thrust": (-1, 0), "flaps": (-1, 0), "brake": (-1, 0), "pitch": (-1, 0), "roll": (-1, 0), "yaw": (-1, 0)}
         self.action_map = self.action_map_default
         self.allies = []
+        self.locked = 0
+
+        self.debug_logs = []
 
         self.flag_focus = False
 
@@ -438,6 +441,11 @@ class Destroyable_Machine(AnimatedModel):
         self.bound_down = hg.Vec3(0, 0, 0)
         self.bound_left = hg.Vec3(0, 0, 0)
         self.bound_right = hg.Vec3(0, 0, 0)
+
+    def log(self, msg: str):
+        self.debug_logs.append(msg)
+        if len(self.debug_logs) > 10:
+            self.debug_logs.remove(self.debug_logs[0])
 
     #============= Devices
 
@@ -1039,6 +1047,7 @@ class Missile(Destroyable_Machine):
         if target is not None and target.nationality != self.nationality:
             self.target = target
             self.target.locked += 1
+            self.target.log("locked by " + str(self.target.locked) + " missiles")
         else:
             self.target = None
 
@@ -1276,10 +1285,11 @@ class Missile(Destroyable_Machine):
                         self.deactivate()
 
     def start_explosion(self):
+        if self.target is not None:
+            self.target.locked -= 1
+            self.target.log("missile exploded, now locked by " + str(self.target.locked) + " missiles")
         if not self.wreck:
             self.wreck = True
-            if self.target is not None:
-                self.target.locked -= 1
             if self.explode is not None:
                 self.explode.flow = 3000
             self.disable_nodes()
@@ -1343,8 +1353,6 @@ class Aircraft(Destroyable_Machine):
         self.brake_level = 0
         self.flag_landing = False
         self.thrust_level = 0
-        self.targeted = 0
-        self.locked = 0
         self.id = 0
 
         self.start_landed = True
