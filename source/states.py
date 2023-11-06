@@ -311,7 +311,7 @@ def menu_state(dts):
                 if Main.keyboard.Pressed(k):
                     f_key = True
                     break
-        if f_key:
+        if f_key or vcr.flag_consistent_record:
             if Main.control_mode == AircraftUserControlDevice.CM_KEYBOARD:
                 f_start = True
                 Main.next_state = "main"
@@ -376,6 +376,7 @@ def init_main_state():
 
     # Setup recorder
     vcr.setup_items(Main)
+    vcr.flag_record_takeover = False
 
     Main.num_start_frames = 10
     Main.reset_timestamp()
@@ -385,7 +386,7 @@ def init_main_state():
 
 
 def main_state(dts):
-    
+
     Main.update_timestamp(dts)
     if not Main.flag_renderless:
         Main.post_process.update_fading(dts)
@@ -431,24 +432,31 @@ def main_state(dts):
 
     # Destroyable_Machines physics & movements update
     #print(vcr.state)
+    for machine in Machines.Destroyable_Machine.INSTANCES:
+        if machine.type == Machines.Destroyable_Machine.TYPE_AIRCRAFT:
+            machine.get_device("IAControlDevice").FSM_machine.replay_takeover = vcr.flag_record_takeover
+            machine.get_device("IAControlDevice").FSM_machine.replay_over = vcr.flag_replay_over
+            machine.get_device("IAControlDevice").FSM_machine.replay = vcr.flag_replay
+            machine.get_device("IAControlDevice").FSM_machine.debug = vcr.flag_debug
     if not vcr.flag_replay:
         Main.update_kinetics(dts)
     else:
+        Main.update_kinetics(dts * vcr.ReplayTimer.instance.speed)
         if not vcr.is_init():
             vcr.init()
         else:
             vcr.update_play(Main, Main.simulation_dt)
-            if Main.keyboard.Pressed(hg.K_U):
-                vcr.ReplayTimer.speed_up()
-            if Main.keyboard.Pressed(hg.K_D):
-                vcr.ReplayTimer.speed_down()
-            if Main.keyboard.Pressed(hg.K_S):
-                vcr.ReplayTimer.reset_speed()
+            #if Main.keyboard.Pressed(hg.K_U):
+            #    vcr.ReplayTimer.speed_up()
+            #if Main.keyboard.Pressed(hg.K_D):
+            #    vcr.ReplayTimer.speed_down()
+            #if Main.keyboard.Pressed(hg.K_S):
+            #    vcr.ReplayTimer.reset_speed()
     if vcr.state == "record":
         vcr.update(Main, Main.simulation_dt)
 
     # Update sfx
-    if Main.flag_sfx:
+    if Main.flag_sfx and not vcr.flag_replay:
         for sfx in Main.players_sfx: sfx.update_sfx(Main, dts)
         for sfx in Main.missiles_sfx: sfx.update_sfx(Main, dts)
 
@@ -486,6 +494,9 @@ def main_state(dts):
 
     if Main.keyboard.Pressed(hg.K_R):
         Main.set_renderless_mode(not Main.flag_renderless)
+
+    if vcr.flag_consistent_record and not Main.flag_renderless:
+        Main.set_renderless_mode(True)
 
     if Main.keyboard.Pressed(hg.K_Tab):
         Main.set_renderless_mode(False)
@@ -603,6 +614,8 @@ def replay_state(dts):
 # =================================== END GAME =============================================
 
 def init_end_state():
+    if vcr.flag_consistent_record:
+        vcr.consistent_record_counter += 1
 
     Main.flag_display_selected_aircraft = False
     Main.smart_camera.flag_inertia = True
@@ -677,7 +690,7 @@ def end_state(dts):
         if Main.end_state_following_aircraft.flag_destroyed or Main.end_state_following_aircraft.wreck:
             Main.end_state_timer -= dts
         
-        if Main.keyboard.Pressed(hg.K_Tab) or Main.end_state_timer < 0 or Main.end_state_following_aircraft.flag_landed:
+        if Main.keyboard.Pressed(hg.K_Tab) or Main.end_state_timer < 0 or Main.end_state_following_aircraft.flag_landed or not vcr.updating_database:
             Main.post_process.setup_fading(1, -1)
             Main.fading_to_next_state = True
             Main.next_state = "menu"

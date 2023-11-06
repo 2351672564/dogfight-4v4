@@ -299,11 +299,15 @@ class HUD_Aircraft:
 		else:
 			c = HUD.color_inactive
 		Overlays.add_text2D("IA Activated", hg.Vec2(0.45, 0.94), 0.015, c * f, Main.hud_font)
-		Overlays.add_text2D("Aircraft ID: " + str(aircraft), hg.Vec2(0.45, 0.9), 0.016, (hg.Color.White * aircraft.health_level + hg.Color.Red * (1 - aircraft.health_level)) * f, Main.hud_font)
-		Overlays.add_text2D("State: " + aircraft.get_device("IAControlDevice").FSM_machine.state.name, hg.Vec2(0.45, 0.85), 0.016, (hg.Color.White * aircraft.health_level + hg.Color.Red * (1 - aircraft.health_level)) * f, Main.hud_font)
 
-		for i, log in enumerate(aircraft.debug_logs):
-			Overlays.add_text2D(log, hg.Vec2(0.45, 0.8 - 0.02 * i), 0.016, (hg.Color.White * aircraft.health_level + hg.Color.Red * (1 - aircraft.health_level)) * f, Main.hud_font)
+		if aircraft.get_device("IAControlDevice").FSM_machine.debug:
+			Overlays.add_text2D("Replay Taken Over" if aircraft.get_device("IAControlDevice").FSM_machine.replay_takeover else
+								"Replay Playing" if aircraft.get_device("IAControlDevice").FSM_machine.replay else
+								"", hg.Vec2(0.55, 0.85), 0.016, hg.Color.Red, Main.hud_font)
+			Overlays.add_text2D("Aircraft ID: " + str(aircraft.name), hg.Vec2(0.45, 0.9), 0.016, (hg.Color.White * aircraft.health_level + hg.Color.Red * (1 - aircraft.health_level)) * f, Main.hud_font)
+			Overlays.add_text2D("State: " + aircraft.get_device("IAControlDevice").FSM_machine.state.name, hg.Vec2(0.45, 0.85), 0.016, (hg.Color.White * aircraft.health_level + hg.Color.Red * (1 - aircraft.health_level)) * f, Main.hud_font)
+			for i, log in enumerate(aircraft.debug_logs):
+				Overlays.add_text2D(log, hg.Vec2(0.45, 0.8 - 0.02 * i), 0.016, (hg.Color.White * aircraft.health_level + hg.Color.Red * (1 - aircraft.health_level)) * f, Main.hud_font)
 
 		# Gear HUD
 		gear = aircraft.get_device("Gear")

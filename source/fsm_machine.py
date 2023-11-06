@@ -32,6 +32,11 @@ class Entity:
         self.flag_missle_short = False
         self.flag_targeted = False
 
+        self.debug = False
+        self.replay = False
+        self.replay_over = False
+        self.replay_takeover = False
+
         #添加状态
         init_state = InitState(entity)
         self.add_state(init_state)
@@ -64,11 +69,12 @@ class Entity:
         """
         :return:
         """
+        if self.replay and self.replay_over:
+            return
         self.state.event(dts)
-        if self.state.extern_exit:
+        if self.state.extern_exit and not self.replay:
             new_state = self.event_handle()  # 监测并判断飞机应处的状态
-            if new_state != self.state.type():
-                self.trans_state(new_state)
+            self.trans_state(new_state)
 
     def add_state(self, state: FSMState):
         key = state.type()
@@ -99,11 +105,40 @@ class Entity:
         :param goal_state: 目标状态
         :return:
         """
+        if goal_state == self.state.type():
+            return
         self.flag_locked = False
         self.flag_missle_short = False
         self.preState.append(goal_state)
         if goal_state in self.states:
             self.set_state(goal_state)
+            if goal_state != FSMStateEnum.sear:
+                aircraft = self.entity.machine
+                n = aircraft.get_machinegun_count()
+                for i in range(n):
+                    mgd = aircraft.get_device("MachineGunDevice_%02d" % i)
+                    if mgd is not None and mgd.is_activated():
+                        mgd.deactivate()
+
+
+    def trans_state_by_name(self, goal_state: str):
+        """
+        状态转换
+        :param goal_state: 目标状态
+        :return:
+        """
+        gs = self.state
+        if goal_state == "FSMStateEnum.init":
+            gs = FSMStateEnum.init
+        if goal_state == "FSMStateEnum.liftoff":
+            gs = FSMStateEnum.liftoff
+        if goal_state == "FSMStateEnum.sear":
+            gs = FSMStateEnum.sear
+        if goal_state == "FSMStateEnum.esca":
+            gs = FSMStateEnum.esca
+        if goal_state == "FSMStateEnum.rep":
+            gs = FSMStateEnum.rep
+        self.trans_state(gs)
 
     def destroy(self):
         """
@@ -134,7 +169,6 @@ class Entity:
         :return:
         """
         if self.entity.machine.locked > 0 and not self.flag_locked:
-            self.entity.machine.log("locked by missile")
             self.flag_locked = True
             if random.uniform(0, 1) < 0.5:
                 return FSMStateEnum.esca

@@ -265,7 +265,10 @@ class TargettingDevice(MachineDevice):
         self.target_id = 0
         if self.first_search:  # 第一次 随机寻找目标
             self.target_id = int(uniform(0, len(self.targets) - 0.1)) + 1
-            self.machine.log(str(self.target_id) + " targeted (first search)")
+            if self.target_id != 0:
+                self.machine.log(self.targets[self.target_id - 1].name + " targeted (target wrecked)")
+            else:
+                self.machine.log("target search error")
             self.first_search = False
         else:  # 第二次及之后 寻找距离最近的目标
             target_distances = []
@@ -287,7 +290,10 @@ class TargettingDevice(MachineDevice):
                 target = self.targets[target_id - 1]
                 if not target.wreck and target.activated:
                     self.target_id = target_id
-                    self.machine.log(str(target_id) + " targeted (target wrecked)")
+                    if target_id != 0:
+                        self.machine.log(target.name + " targeted (target wrecked)")
+                    else:
+                        self.machine.log("target search error")
                     break
         #if self.target_id != 0:
         #    self.update_target_flag()
@@ -331,7 +337,7 @@ class TargettingDevice(MachineDevice):
                 self.target_angle = 0
                 front_lock_angle = 180
 
-            if self.target_angle < front_lock_angle and self.target_lock_range.x < self.target_distance < self.target_lock_range.y:
+            if not (self.machine.replay_mode and self.machine.replay_pause) and self.target_angle < front_lock_angle and self.target_lock_range.x < self.target_distance < self.target_lock_range.y:
                 t = (self.target_distance - self.target_lock_range.x) / (
                         self.target_lock_range.y - self.target_lock_range.x)
                 delay = self.target_lock_delay.x + t * (self.target_lock_delay.y - self.target_lock_delay.x)
@@ -392,6 +398,18 @@ class MissilesDevice(MachineDevice):
             if self.missiles[i] is not None:
                 state[i] = True
         return state
+
+    def vcr_setup(self):
+        for i, missile in enumerate(self.missiles):
+            if missile is None:
+                continue
+            missile.add_to_update_list()
+            if missile.activated:
+                missile.start(missile.target, self.machine.v_move)
+            else:
+                nd = missile.get_parent_node()
+                nd.GetTransform().SetParent(self.slots_nodes[i])
+                missile.reset(hg.Vec3(0, 0, 0), hg.Vec3(0, 0, 0))
 
     def fire_missile(self, slot_id=-1):
         flag_missile_found = False
@@ -1408,8 +1426,8 @@ class AircraftIAControlDevice(ControlDevice):
         self.IA_altitude_min = 500
         self.IA_altitude_max = 8000
         self.IA_altitude_safe = 1500
-        self.IA_gun_distance_max = 1000
-        self.IA_gun_angle = 10
+        self.IA_gun_distance_max = 3000
+        self.IA_gun_angle = 15
         self.IA_cruising_altitude = 0.1
         self.IA_command = AircraftIAControlDevice.IA_COM_IDLE
 
@@ -1504,7 +1522,7 @@ class AircraftIAControlDevice(ControlDevice):
                     elif self.IA_flag_altitude_correction:  # 高度纠正
                         self.IA_flag_go_to_target = False
                         autopilot.set_autopilot_altitude(self.IA_altitude_safe)
-                        if self.IA_altitude_min < alt < self.IA_altitude_max:
+                        if self.IA_altitude_safe - 100 < alt < self.IA_altitude_safe + 100:
                             self.IA_flag_altitude_correction = False
 
                     else:
@@ -1536,7 +1554,7 @@ class AircraftIAControlDevice(ControlDevice):
                         if alt < self.IA_altitude_min or alt > self.IA_altitude_max:
                             self.IA_flag_altitude_correction = True
 
-                    if td.target_angle < self.IA_gun_angle and td.target_distance < self.IA_gun_distance_max:
+                    if not (self.machine.replay_mode and self.machine.replay_pause) and td.target_angle < self.IA_gun_angle and td.target_distance < self.IA_gun_distance_max:
                         n = aircraft.get_machinegun_count()
                         for i in range(n):
                             mgd = aircraft.get_device("MachineGunDevice_%02d" % i)
@@ -1656,6 +1674,7 @@ class AircraftIAControlDevice(ControlDevice):
                 self.IA_flag_maneuver_progress = 0
             return
 
+        aircraft.set_yaw_level(0)
         if self.IA_flag_maneuver_method == 0:
             aircraft.set_pitch_level(-1)
             if self.IA_flag_maneuver_progress == 0:
@@ -2112,7 +2131,10 @@ class AircraftIAControlDevice(ControlDevice):
             if len(offenders) > 1:
                 offenders.sort(key=lambda p: p[1])
             td.set_target_id(offenders[0][0])
-            self.machine.log(str(offenders[0][0]) + " targeted (hit by this enemy)")
+            if td.target_id != 0:
+                self.machine.log(td.targets[td.target_id - 1].name + " targeted (hit by this enemy)")
+            else:
+                self.machine.log("target search error")
 
     # =============================== Keyboard commands ====================================
 

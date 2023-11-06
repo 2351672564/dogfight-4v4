@@ -360,6 +360,9 @@ class Destroyable_Machine(AnimatedModel):
         self.allies = []
         self.locked = 0
 
+        self.replay_mode = False
+        self.replay_pause = False
+
         self.debug_logs = []
 
         self.flag_focus = False
@@ -1285,11 +1288,12 @@ class Missile(Destroyable_Machine):
                         self.deactivate()
 
     def start_explosion(self):
-        if self.target is not None:
-            self.target.locked -= 1
-            self.target.log("missile exploded, now locked by " + str(self.target.locked) + " missiles")
         if not self.wreck:
             self.wreck = True
+            if self.target is not None:
+                if self.target.locked >= 1:
+                    self.target.locked -= 1
+                self.target.log("missile exploded, now locked by " + str(self.target.locked) + " missiles")
             if self.explode is not None:
                 self.explode.flow = 3000
             self.disable_nodes()

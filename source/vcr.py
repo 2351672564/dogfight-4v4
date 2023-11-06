@@ -53,10 +53,15 @@ fps_record = 60
 state = "disable"
 request_state = "disable"
 
-flag_record_on_start = False
+flag_record_on_start = True
+flag_consistent_record = False
+flag_replay_over = False
 flag_record_takeover = False
 flag_replay = False
 flag_record = False
+flag_debug = True
+consistent_record_counter = 0
+current_record_time = 0
 
 color_before_event = hg.Color(1, 1, 0, 1)
 color_after_event = hg.Color(1, 0, 0, 1)
@@ -92,20 +97,35 @@ class ReplayTimer:
     @classmethod
     def set_speed(cls, speed):
         cls.instance.speed = speed
+        for machine in Machines.Destroyable_Machine.INSTANCES:
+            if machine.type == Machines.Destroyable_Machine.TYPE_AIRCRAFT:
+                machine.replay_pause = cls.instance.speed == 0
 
     @classmethod
     def reset_speed(cls):
         cls.instance.speed = 1
+        if cls.instance.speed == 0:
+            for machine in Machines.Destroyable_Machine.INSTANCES:
+                if machine.type == Machines.Destroyable_Machine.TYPE_AIRCRAFT:
+                    machine.replay_pause = False
         print("Replay Speed Set to " + str(cls.instance.speed))
 
     @classmethod
     def speed_up(cls):
         cls.instance.speed += 0.5
+        for machine in Machines.Destroyable_Machine.INSTANCES:
+            if machine.type == Machines.Destroyable_Machine.TYPE_AIRCRAFT:
+                machine.replay_pause = cls.instance.speed == 0
         print("Replay Speed Set to " + str(cls.instance.speed))
 
     @classmethod
     def speed_down(cls):
         cls.instance.speed -= 0.5
+        if cls.instance.speed <= 0:
+            cls.instance.speed = 0.5
+        for machine in Machines.Destroyable_Machine.INSTANCES:
+            if machine.type == Machines.Destroyable_Machine.TYPE_AIRCRAFT:
+                machine.replay_pause = cls.instance.speed == 0
         print("Replay Speed Set to " + str(cls.instance.speed))
 
     @classmethod
@@ -164,7 +184,9 @@ def is_init():
     return flag_init
 
 def init():
-    global conn, selected_record, flag_init
+    global conn, selected_record, flag_init, current_record_time
+
+    current_record_time = 0
 
     # check everything is set
     if conn is None:
@@ -257,7 +279,7 @@ def record_in_database():
         for name, value in record.items():
             c.execute(f"INSERT INTO {name}(id_rec, c, v) VALUES ({current_id_rec}, {t}, \"{value}\");")
         progress_cptr = i / n_steps
-        i+=1
+        i += 1
         if (i % fps_record) == 0:
             yield
     # record events:
@@ -268,8 +290,7 @@ def record_in_database():
         if (i % 10) == 0:
             yield
 
-
-    c.execute(f"UPDATE records SET max_clock={timer}, min_clock={recorded_min_time}  WHERE id_rec={current_id_rec};")
+    c.execute(f"UPDATE records SET max_clock={current_record_time}, min_clock={recorded_min_time}  WHERE id_rec={current_id_rec};")
     #c.execute(f"UPDATE records SET fps={fps_record} WHERE id_rec={current_id_rec};")
     conn.commit()
     yield
@@ -287,7 +308,10 @@ def stop_record():
 
 
 def update_recording(main, dt):
-    global records, timer, previous_timer, last_value_recorded, recorded_min_time
+    global records, timer, previous_timer, last_value_recorded, recorded_min_time, current_record_time
+
+    current_record_time += hg.time_to_sec_f(dt)
+
     if records is None:
         records = {}
         previous_timer = main.timer
@@ -388,7 +412,7 @@ def pause_play():
 
 
 def update_play(main, dt):
-    global timer, playing
+    global timer, playing, flag_replay_over
     
     '''
     def interpolate_mat(name_record):   # TODO not used yet but can be one day
@@ -463,10 +487,8 @@ def update_play(main, dt):
     ReplayTimer.update(hg.time_to_sec_f(dt))
 
     if ReplayTimer.get_time() >= recorded_max_time:
-        pass
-        #ReplayTimer.set_time(recorded_max_time)
-        #if not pausing:
-        #    pause_play()
+        flag_replay_over = True
+        ReplayTimer.set_time(recorded_max_time)
 
     #if not pausing:
     #    timer += hg.time_to_sec_f(dt)
@@ -480,9 +502,47 @@ def update_play(main, dt):
 def update_gui_record(main):
     
     global selected_item_idx, recorded_min_time, recorded_max_time, timer, fps_record, current_id_play, selected_record, current_id_user, adding_user, user_name, user_info, recorded_fps, request_state
-    global flag_record_takeover, flag_replay
+    global flag_record_takeover, flag_replay, flag_consistent_record, consistent_record_counter, flag_debug
 
     if hg.ImGuiBegin("Dogfight - Recorder"):
+
+        # Auto Record:
+        flag_consistent_record = not hg.ImGuiCombo("Auto Record", 1 if not flag_consistent_record else 0, ["Yes", "No"])[1]
+        hg.ImGuiText("current round: " + str(consistent_record_counter + 1) + ", " + str(consistent_record_counter) + " rounds finished")
+
+        # Debug:
+        flag_debug = not hg.ImGuiCombo("Debug Mode", 1 if not flag_debug else 0, ["Yes", "No"])[1]
+
+        if flag_replay:
+
+            #if recorded_max_time:
+            #    timer = hg.ImGuiSliderFloat("Timeline", ReplayTimer.get_time(), 0, recorded_max_time)[1]
+            #    ReplayTimer.set_time(timer)
+
+            if hg.ImGuiButton("Take Over"):
+                flag_record_takeover = True
+                flag_replay = False
+                for machine in Machines.Destroyable_Machine.INSTANCES:
+                    if machine.type == Machines.Destroyable_Machine.TYPE_AIRCRAFT:
+                        machine.get_device("MissilesDevice").vcr_setup()
+                        machine.replay_mode = True
+            if hg.ImGuiButton("Reset Speed"):
+                ReplayTimer.reset_speed()
+            hg.ImGuiSameLine()
+            #if hg.ImGuiButton("Pause" if ReplayTimer.instance.speed != 0 else "Start"):
+            #    if ReplayTimer.instance.speed == 0:
+            #        ReplayTimer.reset_speed()
+            #    else:
+            #        ReplayTimer.set_speed(0)
+            if hg.ImGuiButton("< Speed down") or main.keyboard.Pressed(hg.K_D):
+                ReplayTimer.speed_down()
+            hg.ImGuiSameLine()
+            hg.ImGuiText(str(ReplayTimer.instance.speed))
+            hg.ImGuiSameLine()
+            if hg.ImGuiButton("Speed up >") or main.keyboard.Pressed(hg.K_U):
+                ReplayTimer.speed_up()
+
+
         if adding_user:
             user_name = hg.ImGuiInputText("Name", user_name, 128)[1]
             user_info = hg.ImGuiInputText("Infos", user_info, 128)[1]
@@ -565,30 +625,17 @@ def update_gui_record(main):
                     recorded_fps = 60
                     r = c.fetchone()
                     if r is not None:
-                        recorded_min_time = r["min_clock"]
+                        #recorded_min_time = r["min_clock"]
                         recorded_max_time = r["max_clock"]
-                        recorded_fps = r["fps"]
-                        hg.ImGuiText("Record infos: Duration: %.2f - FPS: %d" % (recorded_max_time - recorded_min_time, recorded_fps))
+                        #recorded_fps = r["fps"]
+                        #hg.ImGuiText("Record infos: Duration: %.2f - FPS: %d" % (recorded_max_time - recorded_min_time, recorded_fps))
 
                 if hg.ImGuiButton("Enter replay mode"):
                     request_new_state(main, "replay")
 
-            elif recording:
-                if hg.ImGuiButton("Stop recording"):
-                    stop_record()
-                if flag_replay:
-                    if hg.ImGuiButton("Take Over"):
-                        flag_record_takeover = True
-                        flag_replay = False
-                    if hg.ImGuiButton("< Speed down") or main.keyboard.Pressed(hg.K_D):
-                        ReplayTimer.speed_down()
-                    hg.ImGuiSameLine()
-                    hg.ImGuiText(str(ReplayTimer.instance.speed))
-                    hg.ImGuiSameLine()
-                    if hg.ImGuiButton("Speed up >") or main.keyboard.Pressed(hg.K_U):
-                        ReplayTimer.speed_up()
-                    if hg.ImGuiButton("Reset Speed"):
-                        ReplayTimer.reset_speed()
+            #elif recording:
+            #    if hg.ImGuiButton("Stop recording"):
+            #        stop_record()
 
     hg.ImGuiEnd()
 
@@ -598,6 +645,28 @@ def update_gui_replay(main, keyboard):
     global flag_record_takeover, flag_replay
 
     if hg.ImGuiBegin("Dogfight - Replayer"):
+
+        if flag_replay:
+
+            if recorded_max_time:
+                timer = hg.ImGuiSliderFloat("Timeline", ReplayTimer.get_time(), 0, recorded_max_time)[1]
+                ReplayTimer.set_time(timer)
+
+            if hg.ImGuiButton("Take Over"):
+                flag_record_takeover = True
+                flag_replay = False
+                for machine in Machines.Destroyable_Machine.INSTANCES:
+                    if machine.type == Machines.Destroyable_Machine.TYPE_AIRCRAFT:
+                        machine.get_device("MissilesDevice").vcr_setup()
+            if hg.ImGuiButton("< Speed down") or main.keyboard.Pressed(hg.K_D):
+                ReplayTimer.speed_down()
+            hg.ImGuiSameLine()
+            hg.ImGuiText(str(ReplayTimer.instance.speed))
+            hg.ImGuiSameLine()
+            if hg.ImGuiButton("Speed up >") or main.keyboard.Pressed(hg.K_U):
+                ReplayTimer.speed_up()
+            if hg.ImGuiButton("Reset Speed"):
+                ReplayTimer.reset_speed()
 
         if not playing:
             
@@ -683,7 +752,7 @@ def update_gui_wait_request():
     hg.ImGuiEnd()
 
 def update_gui_disable():
-    global request_state, selected_record, flag_record_on_start
+    global request_state, selected_record, flag_record_on_start, flag_consistent_record, consistent_record_counter, flag_debug
 
 
     if hg.ImGuiBegin("Dogfight - Recorder"):
@@ -702,6 +771,18 @@ def update_gui_disable():
 
         # Record at Start:
         flag_record_on_start = not hg.ImGuiCombo("Record on Start", 1 if not flag_record_on_start else 0, ["Yes", "No"])[1]
+
+        # Auto Record:
+        prev = flag_consistent_record
+        flag_consistent_record = not hg.ImGuiCombo("Auto Record", 1 if not flag_consistent_record else 0, ["Yes", "No"])[1]
+        if prev != flag_consistent_record:
+            consistent_record_counter = 0
+        if consistent_record_counter != 0 or flag_consistent_record:
+            hg.ImGuiText(str(consistent_record_counter) + " rounds finished")
+
+        # Debug:
+        flag_debug = not hg.ImGuiCombo("Debug Mode", 1 if not flag_debug else 0, ["Yes", "No"])[1]
+
 
     hg.ImGuiEnd()
 
@@ -797,17 +878,27 @@ def serialize_missile_state(machine:Machines.Missile):
     matrix = dc.serialize_mat4(machine.get_parent_node().GetTransform().GetWorld())
     v_move = dc.serialize_vec3(machine.get_move_vector())
     wreck = dc.serialize_boolean(machine.wreck)
-    return matrix + ":" + v_move + ":" + wreck + ":" + target_index
+    activated = dc.serialize_boolean(machine.activated)
+    target = "-1" if machine.target is None else str(machine.target.instance_index)
+    life_time = str(machine.life_cptr)
+    return matrix + ":" + v_move + ":" + wreck + ":" + target_index + ":" + activated + ":" + target + ":" + life_time
 
 def serialize_aircraft_state(machine:Machines.Aircraft):
     target_index = str(machine.instance_index)
     matrix = dc.serialize_mat4(machine.get_parent_node().GetTransform().GetWorld())
+    linear_speed = str(machine.get_linear_speed())
     v_move = dc.serialize_vec3(machine.get_move_vector())
     health_lvl = str(machine.get_health_level())
     wreck = dc.serialize_boolean(machine.wreck)
     brake_level = str(machine.get_brake_level())
     flaps_level = str(machine.get_flaps_level())
+    pitch = str(machine.get_pilot_pitch_level())
+    roll = str(machine.get_pilot_roll_level())
+    yaw = str(machine.get_pilot_yaw_level())
+    pc = dc.serialize_boolean(machine.post_combustion)
+    thrust_level = str(machine.thrust_level)
     landed = dc.serialize_boolean(machine.flag_landed)
+    fsm_state = str(machine.get_device("IAControlDevice").FSM_machine.state.type())
     td = machine.get_device("TargettingDevice")
     if td is not None:
         target_name = td.get_target_name()
@@ -815,7 +906,8 @@ def serialize_aircraft_state(machine:Machines.Aircraft):
         target_name = None
     if target_name is None:
         target_name = str(target_name)
-    return matrix +":"+ v_move +":"+ health_lvl + ":" + wreck + ":" + brake_level + ":" + flaps_level + ":" + landed + ":" + target_name + ":" + target_index
+    return (matrix +":"+ v_move +":"+ health_lvl + ":" + wreck + ":" + brake_level + ":" + flaps_level + ":" + landed + ":" + target_name + ":" + target_index +
+            ":" + linear_speed + ":" + pitch + ":" + roll + ":" + yaw + ":" + pc + ":" + thrust_level + ":" + fsm_state)
 
 
 def serialize_missile_launcher_state(machine:MissileLauncherS400):
@@ -843,6 +935,17 @@ def deserialize_aircraft_state(machine:Machines.Aircraft, s:str):
     machine.reset_brake_level(float(f[4]))
     machine.reset_flaps_level(float(f[5]))
     machine.flag_landed = bool(f[6])
+    machine.set_linear_speed(float(f[9]))
+    machine.set_pitch_level(float(f[10]))
+    machine.set_roll_level(float(f[11]))
+    machine.set_yaw_level(float(f[12]))
+    machine.thrust_level = float(f[14])
+    machine.get_device("IAControlDevice").FSM_machine.trans_state_by_name(f[15])
+    machine.replay_mode = True
+    if not machine.post_combustion and bool(f[13]):
+        machine.activate_post_combustion()
+    elif machine.post_combustion and not bool(f[13]):
+        machine.deactivate_post_combustion()
     td = machine.get_device("TargettingDevice")
     if td is not None:
         td.set_target_by_name(f[7])
@@ -850,10 +953,18 @@ def deserialize_aircraft_state(machine:Machines.Aircraft, s:str):
 def deserialize_missile_state(machine:Machines.Missile, s:str):
     f = s.split(":")
     machine = Machines.Destroyable_Machine.INSTANCES[int(f[3])]
+    trans = machine.get_parent_node().GetTransform()
+    mat = trans.GetWorld()
+    trans.ClearParent()
+    trans.SetWorld(mat)
     matrix = dc.deserialize_mat4(f[0])
     machine.v_move = dc.deserialize_vec3(f[1])
     machine.wreck = bool(f[2])
     machine.get_parent_node().GetTransform().SetWorld(matrix)
+    machine.activated = bool(f[4])
+    machine.life_cptr = float(f[6])
+    if int(f[5]) != -1:
+        machine.target = Machines.Destroyable_Machine.INSTANCES[int(f[5])]
 
 def deserialize_ship_state(machine:Machines.Carrier, s:str):
     f = s.split(":")

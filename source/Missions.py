@@ -398,11 +398,12 @@ class Missions:
 
 
 		cls.setup_aircrafts_on_carrier(main.players_allies, main.aircraft_carrier_allies, 0)
+		cls.aircrafts_starts_in_sky(main.players_ennemies, hg.Vec3(-8000, 1000, 0), hg.Vec3(2000, 500, 2000), hg.Vec2(-180, -175), hg.Vec2(800 / 3.6, 600 / 3.6))
 
-		n = len(main.players_ennemies)
-		cls.aircrafts_starts_in_sky(main.players_ennemies[0:n // 2], hg.Vec3(-8000, 1000, 0), hg.Vec3(2000, 500, 2000), hg.Vec2(-180, -175), hg.Vec2(800 / 3.6, 600 / 3.6))
+		#n = len(main.players_ennemies)
+		#cls.aircrafts_starts_in_sky(main.players_ennemies[0:n // 2], hg.Vec3(-8000, 1000, 0), hg.Vec3(2000, 500, 2000), hg.Vec2(-180, -175), hg.Vec2(800 / 3.6, 600 / 3.6))
 
-		cls.setup_aircrafts_on_carrier(main.players_ennemies[n//2:n], main.aircraft_carrier_ennemies, 60)
+		#cls.setup_aircrafts_on_carrier(main.players_ennemies[n//2:n], main.aircraft_carrier_ennemies, 60)
 		
 		main.init_playground()
 
@@ -416,7 +417,7 @@ class Missions:
 			if ia is not None:
 				ia.activate()
 
-		main.setup_views_carousel()
+		main.setup_views_carousel(True)
 		main.set_view_carousel("Aircraft_ally_" + str(len(main.players_allies)))
 		main.set_track_view("back")
 
@@ -426,10 +427,10 @@ class Missions:
 		if main.user_aircraft is not None:
 			ia = main.user_aircraft.get_device("IAControlDevice")
 			if ia is not None:
-				ia.deactivate()
+				ia.activate()
 			uctrl = main.user_aircraft.get_device("UserControlDevice")
 			if uctrl is not None:
-				uctrl.activate()
+				uctrl.deactivate()
 			if len(main.players_allies) < 4:
 				main.user_aircraft.reset_thrust_level(1)
 				main.user_aircraft.activate_post_combustion()
@@ -449,11 +450,12 @@ class Missions:
 
 
 		cls.setup_aircrafts_on_carrier(main.players_allies, main.aircraft_carrier_allies, 0)
+		cls.aircrafts_starts_in_sky(main.players_ennemies, hg.Vec3(-8000, 1000, 0), hg.Vec3(2000, 500, 2000), hg.Vec2(-180, -175), hg.Vec2(800 / 3.6, 600 / 3.6))
 
-		n = len(main.players_ennemies)
-		cls.aircrafts_starts_in_sky(main.players_ennemies[0:n // 2], hg.Vec3(-8000, 1000, 0), hg.Vec3(2000, 500, 2000), hg.Vec2(-180, -175), hg.Vec2(800 / 3.6, 600 / 3.6))
+		#n = len(main.players_ennemies)
+		#cls.aircrafts_starts_in_sky(main.players_ennemies[0:n // 2], hg.Vec3(-8000, 1000, 0), hg.Vec3(2000, 500, 2000), hg.Vec2(-180, -175), hg.Vec2(800 / 3.6, 600 / 3.6))
 
-		cls.setup_aircrafts_on_carrier(main.players_ennemies[n//2:n], main.aircraft_carrier_ennemies, 60)
+		#cls.setup_aircrafts_on_carrier(main.players_ennemies[n//2:n], main.aircraft_carrier_ennemies, 60)
 
 		main.init_playground()
 
@@ -640,8 +642,8 @@ class Missions:
 
 		cls.missions.append(Mission("Network mode", ["Eurofighter"]*4, ["Rafale"]*4, 1, 1, Missions.network_mode_setup, Missions.network_mode_end_test, Missions.network_mode_end_phase_update))
 
-		cls.missions.append(Mission("Replay mode", ["Rafale"] * 2 + ["Eurofighter"] * 2, ["Rafale"] * 2 + ["Eurofighter"] * 2, 1, 1, Missions.mission_replay_setup_players, Missions.mission_war_end_test, Missions.mission_war_end_phase_update))
-		cls.missions.append(Mission("War: 4 allies against 4 ennemies", ["Rafale"] * 2 + ["Eurofighter"] * 2, ["Rafale"] * 2 + ["Eurofighter"] * 2, 1, 1, Missions.mission_total_war_setup_players, Missions.mission_war_end_test, Missions.mission_war_end_phase_update))
+		cls.missions.append(Mission("War: 4 allies against 4 ennemies", ["Eurofighter"] * 4, ["Eurofighter"] * 4, 1, 1, Missions.mission_total_war_setup_players, Missions.mission_war_end_test, Missions.mission_war_end_phase_update))
+		cls.missions.append(Mission("Replay mode", ["Eurofighter"] * 4, ["Eurofighter"] * 4, 1, 1, Missions.mission_replay_setup_players, Missions.mission_war_end_test, Missions.mission_war_end_phase_update))
 
 		cls.missions.append(Mission("Training with Rafale", [], ["Rafale"], 0, 1, Missions.mission_setup_training, Missions.mission_training_end_test, Missions.mission_training_end_phase_update))
 		cls.missions.append(Mission("Training with Eurofighter", [], ["Eurofighter"], 0, 1, Missions.mission_setup_training, Missions.mission_training_end_test, Missions.mission_training_end_phase_update))
